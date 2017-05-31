@@ -1,0 +1,138 @@
+---
+title: "assignment RepDate"
+author: "koen klein willink"
+date: "26 mei 2017"
+output: 
+      html_document: 
+      keep_md: true
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE,fig.path='Figs/')
+```
+
+## Step 1: Retrieve data from the web
+The first step is the retrieve the right data set from the web. The script is added below. 
+
+```{r retrieve data}
+temp <- tempfile()
+download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip", 
+              temp)
+con <- unz(temp, "activity.csv")
+dat <- read.table(con, header=T, sep=",")
+unlink(temp)
+```
+
+## Step 2: process/transform data
+Ensure the data fields are in the date formate
+
+```{r process/transform}
+library(lubridate)
+library(markdown)
+dat$date<-as_date(dat$date)
+head(dat)
+```
+
+## Step 3: 
+Calculate the total steps per day and make plot
+```{r total steps per day}
+library(dplyr)
+stepspd<-dat %>%
+  #per date herewith drop the interval
+  group_by(date) %>%
+  #summarize total steps by taking the sum of steps per    #date
+  summarize(totalstep=sum(steps))
+
+#make plot
+library(ggplot2)
+#define ggplot
+plot<-ggplot(stepspd,aes(x=date,y=totalstep))
+#characteristics plot choose identity since already summarize date (otherwise a hist is plotted)
+plot+geom_bar(stat="identity",color="black")+geom_hline(yintercept=mean(stepspd$totalstep,na.rm=TRUE))
+```
+
+##Step 4: Calculate mean and median per day
+
+```{r mean and median per day}
+meanpd<-dat%>%
+  group_by(date)%>%
+  summarize(mean=mean(steps))%>%
+  head()
+
+medianpd<-dat%>%
+  group_by(date)%>%
+  summarize(median=median(steps))%>%
+  head()
+```
+
+## Step 5: Timeserie plot
+Plot timeseries steps per 5 minutes
+```{r timeseries}
+ts<-dat%>%
+  group_by(interval)%>%
+  summarize(average=mean(steps,na.rm=TRUE))
+tsplot<-ggplot(ts,aes(x=interval,y=average))
+tsplot+geom_line()
+```
+
+## Step 6: max number of steps per interval
+```{r max number}
+maximuminterval<-which.max(ts$average)
+absolutemax<-max(ts$average)
+cat("interval with maximum value is",maximuminterval)
+cat(", maximum value is", absolutemax)
+```
+
+## Step 7:imputing missing values
+first calculate the number of mission values and the percentage of missing value
+replacing NA with mean for the interval
+via merging and than mutate functions
+
+```{r imputing mission values}
+numberofmissingvalues<-count(dat[!complete.cases(dat),])
+percentageofmissingvalue<-numberofmissingvalues/count(dat)
+cat("number of missing values are", as.character(numberofmissingvalues))
+
+cat(" ,percentage of missing values is", as.character(percentageofmissingvalue*100),"%")
+
+#create identical dataframe with NA replace
+new7<-dat%>%
+  group_by(interval)%>%
+  summarize(mean=mean(steps,na.rm=TRUE))%>%
+  merge(dat)%>%
+  mutate(steps=ifelse(is.na(steps),mean,steps))%>%
+  group_by(date)%>%
+  summarize(totalstep=sum(steps))
+
+#make plot
+library(ggplot2)
+#define ggplot
+plot5<-ggplot(new7,aes(x=date,y=totalstep))
+#characteristics plot choose identity since already summarize date (otherwise a hist is plotted)
+plot5+geom_bar(stat="identity",color="black")+geom_hline(yintercept=mean(new7$totalstep))
+
+
+
+```
+
+##Step 8:Plot the difference for weekend and workdays
+create identifier for weekends via wday() function and ifelse
+
+```{r workday weekenddays}
+new6<-dat%>%
+  group_by(interval)%>%
+  summarize(mean=mean(steps,na.rm=TRUE))%>%
+  merge(dat)%>%
+  mutate(steps=ifelse(is.na(steps),mean,steps))%>%
+  mutate(wd=wday(date))%>%
+  mutate(ident=ifelse(wd==1|wd==7,"weekend","weekday"))%>%
+  group_by(interval,ident)%>%
+  summarize(mean=mean(steps))
+
+#plot
+plot2<-ggplot(new6,aes(x=interval,y=mean))
+plot2+geom_line()+facet_grid(ident~.)
+
+```
+
+  
